@@ -446,11 +446,12 @@
 
   .tools-row{
     display:flex;
+    flex-wrap:wrap;
     gap:8px;
     margin-top:30px;
   }
   .tool-btn{
-    flex:1;
+    flex:1 1 calc(50% - 8px);
     border:1px solid var(--line-soft);
     border-radius:var(--radius-sm);
     background:var(--bg);
@@ -635,6 +636,7 @@
   <div class="tools-row">
     <button class="tool-btn" id="exportBtn">Download full record</button>
     <button class="tool-btn" id="resetBtn">Uncheck days…</button>
+    <button class="tool-btn" id="dateBtn">Fix start date…</button>
   </div>
   <div class="reset-panel" id="resetPanel">
     <p>Uncheck quarters and daily habits from a given day through Day 30. Area tags and notes stay untouched.</p>
@@ -643,6 +645,15 @@
       <input type="number" id="resetFrom" min="1" max="30" value="1">
       <button class="confirm-danger" id="resetConfirm">Uncheck</button>
       <button id="resetCancel">Cancel</button>
+    </div>
+  </div>
+  <div class="reset-panel" id="datePanel">
+    <p>Correct which calendar date Day 1 actually was. All your logged quarters, habits, notes, and to-dos stay exactly where they are — only the dates shown change.</p>
+    <div class="reset-row">
+      <label for="dateFrom">Day 1 was</label>
+      <input type="date" id="dateFrom">
+      <button class="confirm-danger" id="dateConfirm">Update</button>
+      <button id="dateCancel">Cancel</button>
     </div>
   </div>
 
@@ -1179,6 +1190,38 @@ function initResetPanel(){
   });
 }
 
+function initDatePanel(){
+  const panel = document.getElementById('datePanel');
+  const openBtn = document.getElementById('dateBtn');
+  const cancelBtn = document.getElementById('dateCancel');
+  const confirmBtn = document.getElementById('dateConfirm');
+  const input = document.getElementById('dateFrom');
+
+  openBtn.addEventListener('click', () => {
+    input.value = meta.startDate; // pre-fill with the currently stored Day 1
+    panel.classList.toggle('open');
+  });
+  cancelBtn.addEventListener('click', () => {
+    panel.classList.remove('open');
+  });
+  confirmBtn.addEventListener('click', () => {
+    const val = input.value;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(val)){
+      input.style.background = '#eee';
+      input.focus();
+      return;
+    }
+    // Only the label changes here — quarters/habits/notes/todos stay attached
+    // to their day index, so nothing you've logged moves or is lost.
+    meta.startDate = val;
+    scheduleSave();
+    renderStats();
+    renderTodayCard();
+    renderDaysList();
+    panel.classList.remove('open');
+  });
+}
+
 function csvField(val){
   const s = String(val == null ? '' : val);
   if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
@@ -1219,6 +1262,7 @@ async function init(){
     if(statusBtn.classList.contains('save-error')) doSave();
   });
   initResetPanel();
+  initDatePanel();
   document.getElementById('exportBtn').addEventListener('click', exportRecord);
   await loadAppData();
   renderStats();
