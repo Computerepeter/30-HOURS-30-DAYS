@@ -691,7 +691,15 @@ let days = [];
 const STORAGE_KEY = 'tracker-data';
 let saveDebounceTimer = null;
 
-function dstr(d){ return d.toISOString().slice(0,10); }
+function dstr(d){
+  // Use local calendar components, not toISOString() — toISOString converts
+  // to UTC first, which silently shifts the date back a day for anyone in a
+  // timezone ahead of UTC (e.g. Lagos, UTC+1). This keeps "today" honest.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 function addDays(dateStr, n){
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + n);
@@ -1043,7 +1051,7 @@ function renderTodayCard(){
   const card = document.getElementById('todayCard');
   card.innerHTML = `
     <p class="kicker">Today</p>
-    <h2>${fmtDate(addDays(meta.startDate, i).toISOString().slice(0,10))}</h2>
+    <h2>${fmtDate(dstr(addDays(meta.startDate, i)))}</h2>
     ${quarterButtonsHTML(i)}
     ${habitsRowHTML(i)}
     ${areaAndNoteHTML(i)}
@@ -1065,7 +1073,7 @@ function renderDaysList(){
   listEl.innerHTML = '';
   for(let i = 0; i < TOTAL_DAYS; i++){
     if(i === ti) continue; // today shown above
-    const dateStr = addDays(meta.startDate, i).toISOString().slice(0,10);
+    const dateStr = dstr(addDays(meta.startDate, i));
     const isFuture = dateStr > todayStr;
     const row = document.createElement('div');
     row.className = 'day-row' + (isFuture ? ' future' : '') + (openDay === i ? ' open' : '');
@@ -1231,7 +1239,7 @@ function csvField(val){
 function exportRecord(){
   const rows = [['Day','Date','Quarters Completed','Hours','Habits Done','Area','Note']];
   days.forEach((d, i) => {
-    const dateStr = addDays(meta.startDate, i).toISOString().slice(0,10);
+    const dateStr = dstr(addDays(meta.startDate, i));
     const doneCount = d.quarters.filter(v=>v).length;
     const hours = (doneCount * 15 / 60).toFixed(2).replace(/\.00$/,'.0');
     const habitsDone = HABITS.filter(h => d.habits[h.key]).map(h => h.label).join('; ');
