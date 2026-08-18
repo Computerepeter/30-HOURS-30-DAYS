@@ -216,6 +216,11 @@
     border-radius:8px;
   }
   .hbtn-time:hover{ background:rgba(128,128,128,0.18); }
+  .hbtn-time-locked{
+    cursor:default;
+    pointer-events:none;
+  }
+  .hbtn-time-locked:hover{ background:none; }
   .habit-time-input{
     width:90%;
     font-size:10px;
@@ -700,8 +705,9 @@
     border-radius:10px;
     border:1px solid var(--line-soft);
     background:var(--panel);
-    cursor:pointer;
+    cursor:default;
     outline:none;
+    pointer-events:none; /* auto-only — moves solely from checked boxes, never by dragging */
   }
   .wins-slider::-webkit-slider-runnable-track{
     height:16px;
@@ -716,10 +722,9 @@
     border-radius:50%;
     background:var(--bg);
     border:2px solid var(--ink);
-    cursor:grab;
+    cursor:default;
     box-shadow:0 1px 3px rgba(0,0,0,0.15);
   }
-  .wins-slider::-webkit-slider-thumb:active{ cursor:grabbing; }
   .wins-slider::-moz-range-track{
     height:16px;
     border-radius:10px;
@@ -790,7 +795,7 @@
 
   <div class="wins-bar-wrap">
     <div class="wins-bar-label">Today's wins <span id="winsCount">0 / 3</span></div>
-    <input type="range" id="winsSlider" class="wins-slider" min="0" max="3" step="1" value="0">
+    <input type="range" id="winsSlider" class="wins-slider" min="0" max="3" step="1" value="0" tabindex="-1" aria-readonly="true">
     <div class="wins-ticks">
       <span>Habits</span>
       <span>To-do list</span>
@@ -798,7 +803,6 @@
     </div>
     <div class="wins-bar-footer">
       <span class="wins-time-note" id="winsTimeNote"></span>
-      <button class="wins-reset-btn" id="winsResetBtn" style="display:none;">Use auto-calculated</button>
     </div>
   </div>
 
@@ -1163,22 +1167,11 @@ function autoWins(){
   return { wins, total: WINS_TOTAL };
 }
 
-function displayWins(){
-  const i = todayIndex();
-  const auto = autoWins();
-  const override = days[i].manualWins;
-  if(typeof override === 'number'){
-    return { wins: override, total: auto.total, isOverride: true };
-  }
-  return { wins: auto.wins, total: auto.total, isOverride: false };
-}
-
-function updateWinsVisuals(wins, total, isOverride){
+function updateWinsVisuals(wins, total){
   const pct = total > 0 ? Math.min(100, (wins / total) * 100) : 0;
   const slider = document.getElementById('winsSlider');
   slider.style.background = `linear-gradient(to right, var(--ink) 0%, var(--ink) ${pct}%, var(--panel) ${pct}%, var(--panel) 100%)`;
   document.getElementById('winsCount').textContent = `${wins} / ${total}`;
-  document.getElementById('winsResetBtn').style.display = isOverride ? 'inline' : 'none';
 
   const note = document.getElementById('winsTimeNote');
   const hour = new Date().getHours();
@@ -1192,30 +1185,12 @@ function updateWinsVisuals(wins, total, isOverride){
 }
 
 function renderWinsBar(){
-  const { wins, total, isOverride } = displayWins();
+  const { wins, total } = autoWins();
   const slider = document.getElementById('winsSlider');
   slider.max = total;
   slider.step = 1;
   slider.value = wins;
-  updateWinsVisuals(wins, total, isOverride);
-}
-
-function initWinsSlider(){
-  const slider = document.getElementById('winsSlider');
-  const resetBtn = document.getElementById('winsResetBtn');
-  slider.addEventListener('input', ()=>{
-    const i = todayIndex();
-    const val = parseInt(slider.value, 10);
-    days[i].manualWins = val;
-    scheduleSave();
-    updateWinsVisuals(val, parseInt(slider.max, 10), true);
-  });
-  resetBtn.addEventListener('click', ()=>{
-    const i = todayIndex();
-    days[i].manualWins = null;
-    scheduleSave();
-    renderWinsBar();
-  });
+  updateWinsVisuals(wins, total);
 }
 
 function renderStats(){
@@ -1235,16 +1210,12 @@ function quarterButtonsHTML(i){
   </div>`;
 }
 
-let editingHabitTime = null; // habit key currently being edited, or null
 
 function habitsRowHTML(i){
   return `<div class="habits-row" data-day="${i}">
     ${HABITS.map(h => {
-      const isEditingTime = editingHabitTime === h.key;
       const timeVal = habitTimes[h.key] || '';
-      const timePart = isEditingTime
-        ? `<input type="text" class="habit-time-input" data-habit="${h.key}" value="${escapeHtml(timeVal)}" placeholder="set time" maxlength="24">`
-        : `<span class="hbtn-time" data-habit="${h.key}">${timeVal ? escapeHtml(timeVal) : '+ time'}</span>`;
+      const timePart = `<span class="hbtn-time hbtn-time-locked">${timeVal ? escapeHtml(timeVal) : ''}</span>`;
       return `
       <div class="hbtn ${days[i].habits[h.key] ? 'on':''}" data-habit="${h.key}">
         <span class="hbtn-label">${h.label}</span>
@@ -1338,7 +1309,7 @@ function attachQuarterHandlers(container, i, onChange){
   });
 }
 
-function attachHabitsHandlers(container, i, rerender){
+function attachHabitsHandlers(container, i){
   container.querySelectorAll('.hbtn').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
       e.stopPropagation();
@@ -1349,32 +1320,6 @@ function attachHabitsHandlers(container, i, rerender){
       renderDaysList();
     });
   });
-  container.querySelectorAll('.hbtn-time').forEach(span=>{
-    span.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      editingHabitTime = span.dataset.habit;
-      if(rerender) rerender();
-    });
-  });
-  const timeInput = container.querySelector('.habit-time-input');
-  if(timeInput){
-    let cancelled = false;
-    timeInput.addEventListener('click', e => e.stopPropagation());
-    timeInput.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter'){ e.preventDefault(); timeInput.blur(); }
-      else if(e.key === 'Escape'){ e.preventDefault(); cancelled = true; timeInput.blur(); }
-    });
-    timeInput.addEventListener('blur', ()=>{
-      if(!cancelled){
-        habitTimes[timeInput.dataset.habit] = timeInput.value.trim();
-        scheduleSave();
-      }
-      editingHabitTime = null;
-      if(rerender) rerender();
-    });
-    timeInput.focus();
-    timeInput.select();
-  }
 }
 
 function attachAreaAndNoteHandlers(container, i, rerender){
@@ -1557,7 +1502,7 @@ function renderTodayCard(){
     ${detailPanelHTML(i)}
   `;
   attachQuarterHandlers(card, i);
-  attachHabitsHandlers(card, i, renderTodayCard);
+  attachHabitsHandlers(card, i);
   attachDetailToggle(card, i, renderTodayCard);
   attachAreaAndNoteHandlers(card, i, renderTodayCard);
   attachTodoHandlers(card, i, renderTodayCard);
@@ -1604,7 +1549,7 @@ function renderDaysList(){
 
     if(openDay === i){
       attachQuarterHandlers(detail, i);
-      attachHabitsHandlers(detail, i, rerenderDetail);
+      attachHabitsHandlers(detail, i);
       attachDetailToggle(detail, i, rerenderDetail);
       attachAreaAndNoteHandlers(detail, i, rerenderDetail);
       attachTodoHandlers(detail, i, rerenderDetail);
@@ -1856,7 +1801,6 @@ async function init(){
   initResetPanel();
   initDatePanel();
   initNewCyclePanel();
-  initWinsSlider();
   initSync();
   initSyncPanel();
   document.getElementById('exportBtn').addEventListener('click', exportRecord);
