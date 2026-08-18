@@ -15,6 +15,11 @@
 <link rel="icon" href="icon-192.png" sizes="192x192">
 <link rel="icon" href="icon-512.png" sizes="512x512">
 <link rel="manifest" href="manifest.json">
+
+<!-- Only used for optional cross-device sync — harmless to load even if you
+     never fill in FIREBASE_CONFIG below; the app just won't use it. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --bg: #ffffff;
@@ -174,15 +179,15 @@
   }
   .hbtn{
     flex:1 1 calc(50% - 6px);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
     border:1px solid var(--line-soft);
     border-radius:var(--radius-sm);
     background:var(--bg);
     color:var(--gray);
-    font-size:12px;
-    font-weight:bold;
-    text-transform:uppercase;
-    letter-spacing:0.03em;
-    padding:11px 8px;
+    padding:10px 8px;
     text-align:center;
     cursor:pointer;
     user-select:none;
@@ -194,6 +199,70 @@
     border-color:var(--ink);
     color:var(--bg);
   }
+  .hbtn-label{
+    font-size:12px;
+    font-weight:bold;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+  }
+  .hbtn-time{
+    font-size:10px;
+    font-weight:normal;
+    text-transform:none;
+    letter-spacing:0;
+    opacity:0.7;
+    cursor:text;
+    padding:1px 5px;
+    border-radius:8px;
+  }
+  .hbtn-time:hover{ background:rgba(128,128,128,0.18); }
+  .habit-time-input{
+    width:90%;
+    font-size:10px;
+    text-align:center;
+    border:1px solid var(--line-soft);
+    border-radius:6px;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:inherit;
+    padding:2px 4px;
+  }
+  .habit-time-input:focus{ outline:none; }
+
+  .detail-toggle{
+    width:100%;
+    text-align:left;
+    background:none;
+    border:1px dashed var(--line-soft);
+    border-radius:var(--radius-sm);
+    color:var(--gray);
+    font-family:inherit;
+    font-size:12px;
+    font-weight:bold;
+    padding:10px 12px;
+    cursor:pointer;
+    margin-bottom:14px;
+  }
+  .detail-toggle:hover{ background:var(--panel); color:var(--ink); }
+  .detail-body{ display:none; }
+  .detail-body.open{ display:block; }
+
+  .carry-over-btn{
+    display:block;
+    width:100%;
+    text-align:left;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius-sm);
+    background:var(--panel);
+    color:var(--ink);
+    font-family:inherit;
+    font-size:12px;
+    font-weight:bold;
+    padding:9px 11px;
+    cursor:pointer;
+    margin-bottom:10px;
+  }
+  .carry-over-btn:hover{ background:var(--line-soft); }
 
   .area-row{
     display:flex;
@@ -481,7 +550,9 @@
   }
   .reset-row{
     display:flex;
+    flex-wrap:wrap;
     gap:8px;
+    align-items:center;
   }
   .reset-row label{
     font-size:11px;
@@ -585,6 +656,13 @@
   .ref-item:last-child{ margin-bottom:0; }
   .ref-item .area-title{ font-weight:bold; font-size:13px; margin-bottom:4px; }
   .ref-item .area-text{ font-size:13px; color:var(--gray); line-height:1.5; }
+  .ref-item-goal{
+    padding-bottom:14px;
+    margin-bottom:16px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .ref-item-goal .area-title{ text-transform:uppercase; letter-spacing:0.04em; font-size:12px; }
+  .ref-item-goal .area-text{ color:var(--ink); font-weight:500; }
 
   .bd-row{
     display:flex;
@@ -597,6 +675,100 @@
   .bd-bar-track{ flex:1; height:10px; border-radius:6px; background:var(--panel); overflow:hidden; }
   .bd-bar-fill{ height:100%; background:var(--ink); border-radius:6px; }
   .bd-hrs{ width:50px; text-align:right; color:var(--gray); font-size:12px; flex-shrink:0; }
+
+  .wins-bar-wrap{
+    margin:0 0 26px;
+  }
+  .wins-bar-label{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-size:11px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    font-weight:bold;
+    color:var(--gray);
+    margin-bottom:10px;
+  }
+  .wins-bar-label span{ color:var(--ink); font-size:13px; letter-spacing:0; text-transform:none; }
+
+  .wins-slider{
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    height:16px;
+    border-radius:10px;
+    border:1px solid var(--line-soft);
+    background:var(--panel);
+    cursor:pointer;
+    outline:none;
+  }
+  .wins-slider::-webkit-slider-runnable-track{
+    height:16px;
+    border-radius:10px;
+    background:transparent;
+  }
+  .wins-slider::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    appearance:none;
+    width:24px; height:24px;
+    margin-top:-5px;
+    border-radius:50%;
+    background:var(--bg);
+    border:2px solid var(--ink);
+    cursor:grab;
+    box-shadow:0 1px 3px rgba(0,0,0,0.15);
+  }
+  .wins-slider::-webkit-slider-thumb:active{ cursor:grabbing; }
+  .wins-slider::-moz-range-track{
+    height:16px;
+    border-radius:10px;
+    background:transparent;
+  }
+  .wins-slider::-moz-range-thumb{
+    width:24px; height:24px;
+    border-radius:50%;
+    background:var(--bg);
+    border:2px solid var(--ink);
+    cursor:grab;
+    box-shadow:0 1px 3px rgba(0,0,0,0.15);
+  }
+
+  .wins-ticks{
+    display:flex;
+    justify-content:space-between;
+    margin-top:6px;
+  }
+  .wins-ticks span{
+    font-size:10px;
+    color:var(--gray-light);
+    flex:1;
+    text-align:center;
+  }
+  .wins-ticks span:first-child{ text-align:left; }
+  .wins-ticks span:last-child{ text-align:right; }
+
+  .wins-bar-footer{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:8px;
+  }
+  .wins-time-note{
+    font-size:11px;
+    color:var(--gray);
+  }
+  .wins-reset-btn{
+    font-size:11px;
+    text-decoration:underline;
+    color:var(--gray);
+    background:none;
+    border:none;
+    cursor:pointer;
+    padding:0;
+    font-family:inherit;
+  }
+  .wins-reset-btn:hover{ color:var(--ink); }
 </style>
 </head>
 <body>
@@ -614,6 +786,20 @@
     <div class="stat"><span class="num" id="statHours">0.0</span><span class="label">hrs logged</span></div>
     <div class="stat"><span class="num" id="statDay">1</span><span class="label">of 30 days</span></div>
     <div class="stat"><span class="num" id="statStreak">0</span><span class="label">day streak</span></div>
+  </div>
+
+  <div class="wins-bar-wrap">
+    <div class="wins-bar-label">Today's wins <span id="winsCount">0 / 3</span></div>
+    <input type="range" id="winsSlider" class="wins-slider" min="0" max="3" step="1" value="0">
+    <div class="wins-ticks">
+      <span>Habits</span>
+      <span>To-do list</span>
+      <span>4×15 deep focus</span>
+    </div>
+    <div class="wins-bar-footer">
+      <span class="wins-time-note" id="winsTimeNote"></span>
+      <button class="wins-reset-btn" id="winsResetBtn" style="display:none;">Use auto-calculated</button>
+    </div>
   </div>
 
   <div class="audit-panel">
@@ -637,6 +823,8 @@
     <button class="tool-btn" id="exportBtn">Download full record</button>
     <button class="tool-btn" id="resetBtn">Uncheck days…</button>
     <button class="tool-btn" id="dateBtn">Fix start date…</button>
+    <button class="tool-btn" id="newCycleBtn">Start new 30 days…</button>
+    <button class="tool-btn" id="syncBtn">Sync devices…</button>
   </div>
   <div class="reset-panel" id="resetPanel">
     <p>Uncheck quarters and daily habits from a given day through Day 30. Area tags and notes stay untouched.</p>
@@ -656,6 +844,25 @@
       <button id="dateCancel">Cancel</button>
     </div>
   </div>
+  <div class="reset-panel" id="newCyclePanel">
+    <p>Clear quarters, habits, areas, notes, and to-dos for all 30 days and start a fresh cycle from today. Download your record first if you haven't — this can't be undone from here.</p>
+    <div class="reset-row">
+      <button class="confirm-danger" id="newCycleConfirm">Start new 30 days</button>
+      <button id="newCycleCancel">Cancel</button>
+    </div>
+  </div>
+  <div class="reset-panel" id="syncPanel">
+    <p id="syncPanelText">Enter the same sync code on both devices to link them. First time, use "Push" on the device that already has your data, then "Pull" on the other one.</p>
+    <div class="reset-row">
+      <label for="syncCodeInput">Code</label>
+      <input type="text" id="syncCodeInput" placeholder="e.g. peter2026" maxlength="40">
+    </div>
+    <div class="reset-row" style="margin-top:8px;">
+      <button class="confirm-danger" id="syncPushBtn">Push this device's data</button>
+      <button id="syncPullBtn">Pull synced data</button>
+    </div>
+    <div class="wins-time-note" id="syncStatus" style="margin-top:8px;"></div>
+  </div>
 
   <footer id="footerNote">saving…</footer>
 </div>
@@ -665,21 +872,24 @@ const TOTAL_DAYS = 30;
 const QUARTER_LABELS = ['1','2','3','4'];
 const AREAS = ['Work', 'Relationships', 'Faith', 'Work + Relationship', 'Self-Care'];
 const HABITS = [
-  { key:'bath', label:'Bath' },
+  { key:'laybed', label:'Lay Bed' },
+  { key:'prayer', label:'Morning Prayer' },
+  { key:'hygiene', label:'Hygiene' },
   { key:'workout', label:'Workout' },
   { key:'bible', label:'Bible' },
-  { key:'prayer', label:'Prayer' }
+  { key:'music', label:'Music Practice' }
 ];
 const PRIORITIES = [
   { key:'high', label:'High', weight:0 },
   { key:'medium', label:'Med', weight:1 },
   { key:'low', label:'Low', weight:2 }
 ];
+const DAILY_GOAL = 'Win 7 times a day: every habit checked and the full hour\'s quarters checked — all done before 6pm. Getting everything in before 6pm helps me work faster and rest better.';
 const COMMITMENTS = {
-  'Work': 'No social media until 10pm. Wake up early no matter what. Block out five 15-minute deep work sessions: 10–12, 12–3, 3–6.',
-  'Relationships': "Run toward difficult conversations — don't avoid them. At least 3 hard conversations a week.",
+  'Work': 'No social media until 10am. Wake up early no matter what. Block out five 15-minute deep work sessions: 10–12, 12–3, 3–6. Respond to messages almost immediately — don\'t push things forward.',
+  'Relationships': "Run toward difficult conversations — don't avoid them. At least 3 hard conversations a week. Respond to messages almost immediately — don't push things forward.",
   'Faith': 'Pray for 5 minutes every morning, no matter what. Study the word for 5 minutes at 3pm, no matter what. Whatever temptation comes, keep the 12-minute routine.',
-  'Work + Relationship': "Meet people physically more, don't be the silent genius. Ask for feedback from people you've worked with.",
+  'Work + Relationship': "Meet people physically more, don't be the silent genius. Ask for feedback from people you've worked with. Respond to messages almost immediately — don't push things forward.",
   'Self-Care': 'Continue the side quest but document it. Be intentional about self-care — make a monthly list of what you want to do and why, then follow through.'
 };
 
@@ -688,8 +898,122 @@ let meta = null;   // { startDate: 'YYYY-MM-DD' }
 // `area` is whichever area is currently selected for that day; `notes` holds one
 // note per area, so switching the dropdown swaps which note you're looking at/editing.
 let days = [];
+// habitTimes is global, not per-day — one target-time label per habit type,
+// purely a personal visual cue. No notifications, nothing enforced.
+let habitTimes = {};
+const DEFAULT_HABIT_TIMES = {
+  laybed: 'on waking',
+  prayer: 'on waking',
+  hygiene: 'late night',
+  workout: 'morning',
+  bible: '3pm',
+  music: '2pm'
+};
 const STORAGE_KEY = 'tracker-data';
+const SYNC_CODE_KEY = 'tracker-sync-code';
 let saveDebounceTimer = null;
+
+// ---- Cross-device sync (optional) ----------------------------------------
+// Fill these in with your own free Firebase project's web config (Project
+// Settings → General → Your apps → SDK setup and configuration → Config).
+// Safe to leave visible in client code — Firebase protects data via
+// Firestore security rules, not by hiding this config.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBWFAoDV6r4QD0usdkWyFD0ClNhgfQyp9Y",
+  authDomain: "days-38ed3.firebaseapp.com",
+  projectId: "days-38ed3",
+  storageBucket: "days-38ed3.firebasestorage.app",
+  messagingSenderId: "388777828141",
+  appId: "1:388777828141:web:1c6131e05247e956ef3da4"
+};
+
+let syncDb = null;
+let syncCode = localStorage.getItem(SYNC_CODE_KEY) || '';
+let syncUnsub = null;
+let applyingRemoteUpdate = false; // guards against re-saving a change we just received
+
+function syncConfigured(){
+  return FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY';
+}
+
+function initSync(){
+  if(!syncConfigured() || typeof firebase === 'undefined') return;
+  if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  syncDb = firebase.firestore();
+  if(syncCode) connectSync(syncCode, { silent: true });
+}
+
+function connectSync(code, opts){
+  opts = opts || {};
+  if(!syncDb || !code) return;
+  syncCode = code.trim();
+  localStorage.setItem(SYNC_CODE_KEY, syncCode);
+  if(syncUnsub) syncUnsub();
+  syncUnsub = syncDb.collection('trackers').doc(syncCode).onSnapshot(doc => {
+    if(!doc.exists) return;
+    if(doc.metadata.hasPendingWrites) return; // this device's own write echoing back — ignore
+    applyingRemoteUpdate = true;
+    applyPayload(doc.data());
+    applyingRemoteUpdate = false;
+    renderStats();
+    renderAuditPanel();
+    renderTodayCard();
+    renderDaysList();
+  }, err => {
+    console.error('Sync listener error:', err);
+    setSyncStatus('error');
+  });
+  setSyncStatus('connected');
+}
+
+function pushToSync(){
+  if(!syncDb || !syncCode) return;
+  syncDb.collection('trackers').doc(syncCode)
+    .set({ startDate: meta.startDate, days, habitTimes, updatedAt: Date.now() })
+    .catch(err => { console.error('Sync push failed:', err); setSyncStatus('error'); });
+}
+
+function pullFromSync(){
+  if(!syncDb || !syncCode) return Promise.resolve(false);
+  return syncDb.collection('trackers').doc(syncCode).get().then(doc => {
+    if(!doc.exists) return false;
+    applyPayload(doc.data());
+    return true;
+  });
+}
+
+function applyPayload(parsed){
+  meta = { startDate: parsed.startDate };
+  const loaded = Array.isArray(parsed.days) ? parsed.days : [];
+  days = defaultDays().map((d, i) => {
+    if(!loaded[i]) return d;
+    const loadedHabits = loaded[i].habits || {};
+    const mergedHabits = Object.assign(emptyHabits(), loadedHabits);
+    if(!loadedHabits.hasOwnProperty('hygiene')){
+      mergedHabits.hygiene = !!(loadedHabits.bath || loadedHabits.brushteeth);
+    }
+    return {
+      quarters: loaded[i].quarters && loaded[i].quarters.length === 4 ? loaded[i].quarters : d.quarters,
+      area: loaded[i].area || '',
+      notes: Object.assign(emptyNotes(), loaded[i].notes || {}),
+      habits: mergedHabits,
+      todos: Array.isArray(loaded[i].todos) ? loaded[i].todos.map(t => ({ ...t, priority: t.priority || 'medium' })) : [],
+      manualWins: typeof loaded[i].manualWins === 'number' ? loaded[i].manualWins : null
+    };
+  });
+  habitTimes = Object.assign(defaultHabitTimes(), parsed.habitTimes || {});
+  if(!habitTimes.music) habitTimes.music = '2pm';
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ startDate: meta.startDate, days, habitTimes }));
+}
+
+function setSyncStatus(status){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  if(status === 'connected') el.textContent = 'Synced · ' + syncCode;
+  else if(status === 'error') el.textContent = 'Sync error — check connection';
+  else el.textContent = '';
+}
+// ---------------------------------------------------------------------------
 
 function dstr(d){
   // Use local calendar components, not toISOString() — toISOString converts
@@ -722,13 +1046,20 @@ function emptyHabits(){
   return h;
 }
 
+function defaultHabitTimes(){
+  const t = {};
+  HABITS.forEach(x => t[x.key] = DEFAULT_HABIT_TIMES[x.key] || '');
+  return t;
+}
+
 function defaultDays(){
   return Array.from({length: TOTAL_DAYS}, () => ({
     quarters:[false,false,false,false],
     area:'',
     notes: emptyNotes(),
     habits: emptyHabits(),
-    todos: []
+    todos: [],
+    manualWins: null // when set (by dragging the wins slider), overrides the auto-calculated count for that day
   }));
 }
 
@@ -737,22 +1068,12 @@ async function loadAppData(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) throw new Error('no saved data yet');
     const parsed = JSON.parse(raw);
-    meta = { startDate: parsed.startDate };
-    const loaded = Array.isArray(parsed.days) ? parsed.days : [];
-    days = defaultDays().map((d, i) => {
-      if(!loaded[i]) return d;
-      return {
-        quarters: loaded[i].quarters && loaded[i].quarters.length === 4 ? loaded[i].quarters : d.quarters,
-        area: loaded[i].area || '',
-        notes: Object.assign(emptyNotes(), loaded[i].notes || {}),
-        habits: Object.assign(emptyHabits(), loaded[i].habits || {}),
-        todos: Array.isArray(loaded[i].todos) ? loaded[i].todos.map(t => ({ ...t, priority: t.priority || 'medium' })) : []
-      };
-    });
+    applyPayload(parsed);
   }catch(e){
     const start = dstr(addDays(dstr(new Date()), -3)); // started 3 days ago
     meta = { startDate: start };
     days = defaultDays();
+    habitTimes = defaultHabitTimes();
     scheduleSave(); // write the initial record so it exists next load
   }
 }
@@ -767,11 +1088,13 @@ function scheduleSave(){
 
 
 function doSave(){
+  if(applyingRemoteUpdate) return; // don't echo a change we just received back out
   setSaveStatus('saving');
   try{
-    const payload = JSON.stringify({ startDate: meta.startDate, days });
+    const payload = JSON.stringify({ startDate: meta.startDate, days, habitTimes });
     localStorage.setItem(STORAGE_KEY, payload);
     setSaveStatus('saved');
+    pushToSync();
   }catch(e){
     console.error('Save failed:', e);
     setSaveStatus('error');
@@ -823,11 +1146,84 @@ function dialGradient(quarters){
   return `conic-gradient(${colors[0]} 0deg 90deg, ${colors[1]} 90deg 180deg, ${colors[2]} 180deg 270deg, ${colors[3]} 270deg 360deg)`;
 }
 
+const WINS_TOTAL = 3;
+const WINS_LABELS = ['Habits', 'To-do list', '4×15 deep focus'];
+
+function autoWins(){
+  // Three whole moves, one per group, each only counting when fully done:
+  // 1) every daily habit (Lay Bed, Hygiene, Bible, etc.) ticked
+  // 2) every to-do on today's list checked off
+  // 3) all four 15-minute quarters ticked
+  const i = todayIndex();
+  const d = days[i];
+  const habitsAllDone = HABITS.every(h => d.habits[h.key]);
+  const todosAllDone = (d.todos && d.todos.length > 0) && d.todos.every(t => t.done);
+  const hourAllDone = d.quarters.every(v => v === true);
+  const wins = (habitsAllDone ? 1 : 0) + (todosAllDone ? 1 : 0) + (hourAllDone ? 1 : 0);
+  return { wins, total: WINS_TOTAL };
+}
+
+function displayWins(){
+  const i = todayIndex();
+  const auto = autoWins();
+  const override = days[i].manualWins;
+  if(typeof override === 'number'){
+    return { wins: override, total: auto.total, isOverride: true };
+  }
+  return { wins: auto.wins, total: auto.total, isOverride: false };
+}
+
+function updateWinsVisuals(wins, total, isOverride){
+  const pct = total > 0 ? Math.min(100, (wins / total) * 100) : 0;
+  const slider = document.getElementById('winsSlider');
+  slider.style.background = `linear-gradient(to right, var(--ink) 0%, var(--ink) ${pct}%, var(--panel) ${pct}%, var(--panel) 100%)`;
+  document.getElementById('winsCount').textContent = `${wins} / ${total}`;
+  document.getElementById('winsResetBtn').style.display = isOverride ? 'inline' : 'none';
+
+  const note = document.getElementById('winsTimeNote');
+  const hour = new Date().getHours();
+  if(wins >= total){
+    note.textContent = 'All 3 in today';
+  }else if(hour < 18){
+    note.textContent = 'Before 6pm — still time';
+  }else{
+    note.textContent = 'Past 6pm';
+  }
+}
+
+function renderWinsBar(){
+  const { wins, total, isOverride } = displayWins();
+  const slider = document.getElementById('winsSlider');
+  slider.max = total;
+  slider.step = 1;
+  slider.value = wins;
+  updateWinsVisuals(wins, total, isOverride);
+}
+
+function initWinsSlider(){
+  const slider = document.getElementById('winsSlider');
+  const resetBtn = document.getElementById('winsResetBtn');
+  slider.addEventListener('input', ()=>{
+    const i = todayIndex();
+    const val = parseInt(slider.value, 10);
+    days[i].manualWins = val;
+    scheduleSave();
+    updateWinsVisuals(val, parseInt(slider.max, 10), true);
+  });
+  resetBtn.addEventListener('click', ()=>{
+    const i = todayIndex();
+    days[i].manualWins = null;
+    scheduleSave();
+    renderWinsBar();
+  });
+}
+
 function renderStats(){
   document.getElementById('statHours').textContent = hoursDone().toFixed(2).replace(/\.00$/,'.0');
   document.getElementById('statDay').textContent = (todayIndex()+1);
   document.getElementById('statStreak').textContent = currentStreak();
   document.getElementById('dayCounter').textContent = `Day ${todayIndex()+1} of ${TOTAL_DAYS} · started ${fmtDate(meta.startDate)}`;
+  renderWinsBar();
 }
 
 function quarterButtonsHTML(i){
@@ -839,11 +1235,22 @@ function quarterButtonsHTML(i){
   </div>`;
 }
 
+let editingHabitTime = null; // habit key currently being edited, or null
+
 function habitsRowHTML(i){
   return `<div class="habits-row" data-day="${i}">
-    ${HABITS.map(h => `
-      <div class="hbtn ${days[i].habits[h.key] ? 'on':''}" data-habit="${h.key}">${h.label}</div>
-    `).join('')}
+    ${HABITS.map(h => {
+      const isEditingTime = editingHabitTime === h.key;
+      const timeVal = habitTimes[h.key] || '';
+      const timePart = isEditingTime
+        ? `<input type="text" class="habit-time-input" data-habit="${h.key}" value="${escapeHtml(timeVal)}" placeholder="set time" maxlength="24">`
+        : `<span class="hbtn-time" data-habit="${h.key}">${timeVal ? escapeHtml(timeVal) : '+ time'}</span>`;
+      return `
+      <div class="hbtn ${days[i].habits[h.key] ? 'on':''}" data-habit="${h.key}">
+        <span class="hbtn-label">${h.label}</span>
+        ${timePart}
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -891,8 +1298,19 @@ function todoPanelHTML(i){
       `;
       }).join('')
     : `<li class="todo-empty">No tasks yet — add what you need to get done today.</li>`;
+
+  // Only offer carry-over on today's own panel, pulling from the actual day before it.
+  let carryOverHTML = '';
+  if(i === todayIndex() && i > 0){
+    const yTodos = (days[i-1].todos || []).filter(t => !t.done);
+    if(yTodos.length > 0){
+      carryOverHTML = `<button class="carry-over-btn" data-day="${i}">Carry over ${yTodos.length} unfinished from yesterday</button>`;
+    }
+  }
+
   return `
     <div class="todo-row"><label>To-do</label></div>
+    ${carryOverHTML}
     <div class="todo-input-row">
       <input type="text" class="todo-input" data-day="${i}" placeholder="Add a task…" maxlength="140">
       <select class="todo-priority-select" data-day="${i}">
@@ -920,7 +1338,7 @@ function attachQuarterHandlers(container, i, onChange){
   });
 }
 
-function attachHabitsHandlers(container, i){
+function attachHabitsHandlers(container, i, rerender){
   container.querySelectorAll('.hbtn').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
       e.stopPropagation();
@@ -931,6 +1349,32 @@ function attachHabitsHandlers(container, i){
       renderDaysList();
     });
   });
+  container.querySelectorAll('.hbtn-time').forEach(span=>{
+    span.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      editingHabitTime = span.dataset.habit;
+      if(rerender) rerender();
+    });
+  });
+  const timeInput = container.querySelector('.habit-time-input');
+  if(timeInput){
+    let cancelled = false;
+    timeInput.addEventListener('click', e => e.stopPropagation());
+    timeInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); timeInput.blur(); }
+      else if(e.key === 'Escape'){ e.preventDefault(); cancelled = true; timeInput.blur(); }
+    });
+    timeInput.addEventListener('blur', ()=>{
+      if(!cancelled){
+        habitTimes[timeInput.dataset.habit] = timeInput.value.trim();
+        scheduleSave();
+      }
+      editingHabitTime = null;
+      if(rerender) rerender();
+    });
+    timeInput.focus();
+    timeInput.select();
+  }
 }
 
 function attachAreaAndNoteHandlers(container, i, rerender){
@@ -960,6 +1404,7 @@ function attachTodoHandlers(container, i, rerender){
   const input = container.querySelector('.todo-input');
   const addBtn = container.querySelector('.todo-add-btn');
   const prioritySelect = container.querySelector('.todo-priority-select');
+  const carryBtn = container.querySelector('.carry-over-btn');
 
   const addTask = () => {
     const text = input.value.trim();
@@ -970,6 +1415,24 @@ function attachTodoHandlers(container, i, rerender){
     scheduleSave();
     rerender();
   };
+
+  if(carryBtn){
+    carryBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const yTodos = (days[i-1].todos || []).filter(t => !t.done);
+      if(!days[i].todos) days[i].todos = [];
+      yTodos.forEach(t => {
+        days[i].todos.push({
+          id: Date.now() + '-' + Math.random().toString(36).slice(2,7),
+          text: t.text,
+          done: false,
+          priority: t.priority || 'medium'
+        });
+      });
+      scheduleSave();
+      rerender();
+    });
+  }
 
   if(addBtn){
     addBtn.addEventListener('click', (e)=>{ e.stopPropagation(); addTask(); });
@@ -1046,6 +1509,43 @@ function attachTodoHandlers(container, i, rerender){
   });
 }
 
+// Area/notes/to-dos are optional detail, collapsed by default so the daily
+// minimum is just quarters + habits. Auto-opens if a day already has content
+// in it, so returning to a day you've filled in doesn't hide your own data.
+let detailToggled = {}; // day index -> explicit open state, overrides the default
+
+function hasDetailContent(i){
+  const d = days[i];
+  return !!d.area || (d.todos && d.todos.length > 0);
+}
+
+function isDetailOpen(i){
+  if(Object.prototype.hasOwnProperty.call(detailToggled, i)) return detailToggled[i];
+  return hasDetailContent(i);
+}
+
+function detailPanelHTML(i){
+  const open = isDetailOpen(i);
+  return `
+    <button class="detail-toggle" data-day="${i}">${open ? '− Hide detail' : '+ Add detail (area, notes, to-dos)'}</button>
+    <div class="detail-body ${open ? 'open' : ''}" data-day="${i}">
+      ${areaAndNoteHTML(i)}
+      ${todoPanelHTML(i)}
+    </div>
+  `;
+}
+
+function attachDetailToggle(container, i, rerender){
+  const btn = container.querySelector('.detail-toggle');
+  if(btn){
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      detailToggled[i] = !isDetailOpen(i);
+      rerender();
+    });
+  }
+}
+
 function renderTodayCard(){
   const i = todayIndex();
   const card = document.getElementById('todayCard');
@@ -1054,13 +1554,14 @@ function renderTodayCard(){
     <h2>${fmtDate(dstr(addDays(meta.startDate, i)))}</h2>
     ${quarterButtonsHTML(i)}
     ${habitsRowHTML(i)}
-    ${areaAndNoteHTML(i)}
-    ${todoPanelHTML(i)}
+    ${detailPanelHTML(i)}
   `;
   attachQuarterHandlers(card, i);
-  attachHabitsHandlers(card, i);
+  attachHabitsHandlers(card, i, renderTodayCard);
+  attachDetailToggle(card, i, renderTodayCard);
   attachAreaAndNoteHandlers(card, i, renderTodayCard);
   attachTodoHandlers(card, i, renderTodayCard);
+  renderStats(); // keeps the wins bar (essentials count included) in sync with todo/area/habit edits
 }
 
 let openDay = null;
@@ -1092,8 +1593,7 @@ function renderDaysList(){
     detail.innerHTML = `
       ${quarterButtonsHTML(i)}
       ${habitsRowHTML(i)}
-      ${areaAndNoteHTML(i)}
-      ${todoPanelHTML(i)}
+      ${detailPanelHTML(i)}
     `;
     row.addEventListener('click', ()=>{
       openDay = (openDay === i) ? null : i;
@@ -1104,7 +1604,8 @@ function renderDaysList(){
 
     if(openDay === i){
       attachQuarterHandlers(detail, i);
-      attachHabitsHandlers(detail, i);
+      attachHabitsHandlers(detail, i, rerenderDetail);
+      attachDetailToggle(detail, i, rerenderDetail);
       attachAreaAndNoteHandlers(detail, i, rerenderDetail);
       attachTodoHandlers(detail, i, rerenderDetail);
     }
@@ -1131,7 +1632,13 @@ function renderAuditHours(){
 }
 
 function renderAuditCommitments(){
-  document.getElementById('tabCommit').innerHTML = AREAS.map(a => `
+  const goalHTML = `
+    <div class="ref-item ref-item-goal">
+      <div class="area-title">Daily Goal</div>
+      <div class="area-text">${DAILY_GOAL}</div>
+    </div>
+  `;
+  document.getElementById('tabCommit').innerHTML = goalHTML + AREAS.map(a => `
     <div class="ref-item">
       <div class="area-title">${a}</div>
       <div class="area-text">${COMMITMENTS[a] || ''}</div>
@@ -1230,6 +1737,83 @@ function initDatePanel(){
   });
 }
 
+function startNewCycle(){
+  days = defaultDays();
+  meta.startDate = dstr(new Date());
+  detailToggled = {};
+  openDay = null;
+  editingTodo = null;
+  scheduleSave();
+  renderStats();
+  renderTodayCard();
+  renderDaysList();
+  renderAuditPanel();
+}
+
+function initNewCyclePanel(){
+  const panel = document.getElementById('newCyclePanel');
+  const openBtn = document.getElementById('newCycleBtn');
+  const cancelBtn = document.getElementById('newCycleCancel');
+  const confirmBtn = document.getElementById('newCycleConfirm');
+
+  openBtn.addEventListener('click', () => {
+    panel.classList.toggle('open');
+  });
+  cancelBtn.addEventListener('click', () => {
+    panel.classList.remove('open');
+  });
+  confirmBtn.addEventListener('click', () => {
+    startNewCycle();
+    panel.classList.remove('open');
+  });
+}
+
+function initSyncPanel(){
+  const panel = document.getElementById('syncPanel');
+  const openBtn = document.getElementById('syncBtn');
+  const codeInput = document.getElementById('syncCodeInput');
+  const pushBtn = document.getElementById('syncPushBtn');
+  const pullBtn = document.getElementById('syncPullBtn');
+  const panelText = document.getElementById('syncPanelText');
+  const statusEl = document.getElementById('syncStatus');
+
+  if(!syncConfigured()){
+    panelText.textContent = "Cross-device sync isn't set up yet — needs a free Firebase project connected in the code (FIREBASE_CONFIG) before this works.";
+    pushBtn.disabled = true;
+    pullBtn.disabled = true;
+    codeInput.disabled = true;
+  }else{
+    codeInput.value = syncCode;
+  }
+
+  openBtn.addEventListener('click', () => panel.classList.toggle('open'));
+
+  pushBtn.addEventListener('click', () => {
+    const code = codeInput.value.trim();
+    if(!code) return;
+    connectSync(code);
+    pushToSync();
+    statusEl.textContent = 'Pushed this device\'s data to "' + code + '".';
+  });
+
+  pullBtn.addEventListener('click', () => {
+    const code = codeInput.value.trim();
+    if(!code) return;
+    connectSync(code, { silent: true });
+    pullFromSync().then(found => {
+      if(found){
+        renderStats();
+        renderAuditPanel();
+        renderTodayCard();
+        renderDaysList();
+        statusEl.textContent = 'Pulled synced data from "' + code + '".';
+      }else{
+        statusEl.textContent = 'No data found yet under "' + code + '" — push from your other device first.';
+      }
+    });
+  });
+}
+
 function csvField(val){
   const s = String(val == null ? '' : val);
   if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
@@ -1271,6 +1855,10 @@ async function init(){
   });
   initResetPanel();
   initDatePanel();
+  initNewCyclePanel();
+  initWinsSlider();
+  initSync();
+  initSyncPanel();
   document.getElementById('exportBtn').addEventListener('click', exportRecord);
   await loadAppData();
   renderStats();
