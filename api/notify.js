@@ -1,12 +1,11 @@
-// Called by an external scheduler (e.g. cron-job.org) at 4pm and 10pm West
-// Africa Time (WAT, UTC+1) — see the setup steps for the exact UTC times to
-// schedule, since WAT has no daylight saving so this offset never changes.
+// Called repeatedly by an external scheduler (e.g. cron-job.org) throughout
+// the day — every call just checks what's still outstanding today and sends
+// ONE combined push if anything is. Once everything's done, every later call
+// this same day is a silent no-op — that's what makes this "persistent until
+// finished" rather than a single one-shot reminder.
 //
-// Reads today's data from Firestore, checks whether the relevant group
-// (habits or to-dos) is fully done, and if not, sends a real push notification
-// via Firebase Cloud Messaging. This is the piece a static site cannot do on
-// its own — it needs to run on a server on a schedule, independent of whether
-// anyone has the app open.
+// This is the piece a static site cannot do on its own — it needs to run on
+// a server on a schedule, independent of whether anyone has the app open.
 
 const admin = require('firebase-admin');
 
@@ -27,13 +26,8 @@ function localDateStr(date, tzOffsetHours) {
 module.exports = async (req, res) => {
   try {
     const syncCode = process.env.SYNC_CODE;
-    const deadline = (req.query.deadline || '').toString();
-
     if (!syncCode) {
       return res.status(500).json({ error: 'SYNC_CODE env var not set' });
-    }
-    if (deadline !== 'habits' && deadline !== 'todos') {
-      return res.status(400).json({ error: 'pass ?deadline=habits or ?deadline=todos' });
     }
 
     const db = admin.firestore();
@@ -59,25 +53,29 @@ module.exports = async (req, res) => {
 
     const habitsAllDone = HABIT_KEYS.every((k) => day.habits && day.habits[k]);
     const todosAllDone = Array.isArray(day.todos) && day.todos.length > 0 && day.todos.every((t) => t.done);
+    const hourAllDone = Array.isArray(day.quarters) && day.quarters.length === 4 && day.quarters.every((q) => q === true);
+    // "Journeying" — today's area picked and that area's note actually written.
+    const journalDone = !!(day.area && day.notes && (day.notes[day.area] || '').trim().length > 0);
 
-    let title = '';
-    let body = '';
-    if (deadline === 'habits') {
-      if (habitsAllDone) return res.status(200).json({ skipped: 'habits already done' });
-      title = 'Habits not done';
-      body = "It's 4pm — your habits for today aren't all checked yet.";
-    } else {
-      if (todosAllDone) return res.status(200).json({ skipped: 'to-dos already done' });
-      title = 'To-dos not done';
-      body = "It's 10pm — your to-do list for today isn't finished yet.";
+    const outstanding = [];
+    if (!habitsAllDone) outstanding.push('Habits');
+    if (!hourAllDone) outstanding.push('Deep-focus hour');
+    if (!todosAllDone) outstanding.push('To-do list');
+    if (!journalDone) outstanding.push('Journal entry');
+
+    if (outstanding.length === 0) {
+      return res.status(200).json({ skipped: 'everything done today' });
     }
+
+    const title = outstanding.length === 4 ? 'Nothing logged yet today' : 'Still open today';
+    const body = outstanding.join(' · ');
 
     await admin.messaging().send({
       token,
       notification: { title, body },
     });
 
-    res.status(200).json({ sent: true });
+    res.status(200).json({ sent: true, outstanding });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
