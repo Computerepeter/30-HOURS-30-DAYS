@@ -20,6 +20,7 @@
      never fill in FIREBASE_CONFIG below; the app just won't use it. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <style>
   :root{
     --bg: #ffffff;
@@ -763,6 +764,10 @@
     font-size:11px;
     color:var(--gray);
   }
+  .wins-time-note.wins-time-overdue{
+    color:var(--ink);
+    font-weight:bold;
+  }
   .wins-reset-btn{
     font-size:11px;
     text-decoration:underline;
@@ -829,6 +834,7 @@
     <button class="tool-btn" id="dateBtn">Fix start date…</button>
     <button class="tool-btn" id="newCycleBtn">Start new 30 days…</button>
     <button class="tool-btn" id="syncBtn">Sync devices…</button>
+    <button class="tool-btn" id="notifBtn">Enable notifications…</button>
   </div>
   <div class="reset-panel" id="resetPanel">
     <p>Uncheck quarters and daily habits from a given day through Day 30. Area tags and notes stay untouched.</p>
@@ -867,6 +873,13 @@
     </div>
     <div class="wins-time-note" id="syncStatus" style="margin-top:8px;"></div>
   </div>
+  <div class="reset-panel" id="notifPanel">
+    <p>Get a real phone notification at 4pm if habits aren't done, and at 10pm if to-dos aren't done — fires even if the app is fully closed. Requires sync to be connected first.</p>
+    <div class="reset-row">
+      <button class="confirm-danger" id="notifEnableBtn">Enable on this device</button>
+    </div>
+    <div class="wins-time-note" id="notifStatus" style="margin-top:8px;"></div>
+  </div>
 
   <footer id="footerNote">saving…</footer>
 </div>
@@ -888,7 +901,7 @@ const PRIORITIES = [
   { key:'medium', label:'Med', weight:1 },
   { key:'low', label:'Low', weight:2 }
 ];
-const DAILY_GOAL = 'Win 7 times a day: every habit checked and the full hour\'s quarters checked — all done before 6pm. Getting everything in before 6pm helps me work faster and rest better.';
+const DAILY_GOAL = 'Finish all habits before 4pm. Finish today\'s to-do list before 10pm. No procrastinating — get it done, not just started.';
 const COMMITMENTS = {
   'Work': 'No social media until 10am. Wake up early no matter what. Block out five 15-minute deep work sessions: 10–12, 12–3, 3–6. Respond to messages almost immediately — don\'t push things forward.',
   'Relationships': "Run toward difficult conversations — don't avoid them. At least 3 hard conversations a week. Respond to messages almost immediately — don't push things forward.",
@@ -931,10 +944,53 @@ const FIREBASE_CONFIG = {
   appId: "1:388777828141:web:1c6131e05247e956ef3da4"
 };
 
+// Firebase Console → Project Settings → Cloud Messaging → Web configuration →
+// generate key pair. Needed for real push notifications (Option 2).
+const VAPID_KEY = "YOUR_VAPID_KEY";
+
 let syncDb = null;
 let syncCode = localStorage.getItem(SYNC_CODE_KEY) || '';
 let syncUnsub = null;
 let applyingRemoteUpdate = false; // guards against re-saving a change we just received
+
+function notifConfigured(){
+  return VAPID_KEY && VAPID_KEY !== 'YOUR_VAPID_KEY';
+}
+
+async function enableNotifications(){
+  const statusEl = document.getElementById('notifStatus');
+  if(!syncConfigured() || typeof firebase === 'undefined'){
+    statusEl.textContent = 'Sync isn\'t set up yet — needed before notifications can work.';
+    return;
+  }
+  if(!syncCode){
+    statusEl.textContent = 'Connect sync first (see "Sync devices…") — notifications attach to your synced data.';
+    return;
+  }
+  if(!notifConfigured()){
+    statusEl.textContent = 'Notifications aren\'t fully set up in the code yet (missing VAPID_KEY).';
+    return;
+  }
+  try{
+    const permission = await Notification.requestPermission();
+    if(permission !== 'granted'){
+      statusEl.textContent = 'Permission denied — enable notifications for this site in your browser settings to try again.';
+      return;
+    }
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
+    if(token){
+      await syncDb.collection('trackers').doc(syncCode).set({ fcmToken: token }, { merge: true });
+      statusEl.textContent = 'Notifications enabled on this device.';
+    }else{
+      statusEl.textContent = 'Could not get a notification token — try again.';
+    }
+  }catch(err){
+    console.error('Notification setup failed:', err);
+    statusEl.textContent = 'Setup failed — check the browser console for details.';
+  }
+}
 
 function syncConfigured(){
   return FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY';
@@ -1167,6 +1223,14 @@ function autoWins(){
   return { wins, total: WINS_TOTAL };
 }
 
+function formatCountdown(ms){
+  const totalMin = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if(h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
 function updateWinsVisuals(wins, total){
   const pct = total > 0 ? Math.min(100, (wins / total) * 100) : 0;
   const slider = document.getElementById('winsSlider');
@@ -1174,13 +1238,30 @@ function updateWinsVisuals(wins, total){
   document.getElementById('winsCount').textContent = `${wins} / ${total}`;
 
   const note = document.getElementById('winsTimeNote');
-  const hour = new Date().getHours();
+  note.classList.remove('wins-time-overdue');
+  const now = new Date();
+  const i = todayIndex();
+  const d = days[i];
+  const habitsAllDone = HABITS.every(h => d.habits[h.key]);
+  const todosAllDone = (d.todos && d.todos.length > 0) && d.todos.every(t => t.done);
+
+  const habitDeadline = new Date(now); habitDeadline.setHours(16,0,0,0);
+  const todoDeadline = new Date(now); todoDeadline.setHours(22,0,0,0);
+
   if(wins >= total){
     note.textContent = 'All 3 in today';
-  }else if(hour < 18){
-    note.textContent = 'Before 6pm — still time';
+  }else if(!habitsAllDone && now >= habitDeadline){
+    note.textContent = formatCountdown(now - habitDeadline) + ' past the 4pm habit deadline';
+    note.classList.add('wins-time-overdue');
+  }else if(!todosAllDone && now >= todoDeadline){
+    note.textContent = formatCountdown(now - todoDeadline) + ' past the 10pm to-do deadline';
+    note.classList.add('wins-time-overdue');
+  }else if(!habitsAllDone){
+    note.textContent = formatCountdown(habitDeadline - now) + ' left to finish habits (4pm)';
+  }else if(!todosAllDone){
+    note.textContent = formatCountdown(todoDeadline - now) + ' left to finish to-dos (10pm)';
   }else{
-    note.textContent = 'Past 6pm';
+    note.textContent = '';
   }
 }
 
@@ -1759,6 +1840,14 @@ function initSyncPanel(){
   });
 }
 
+function initNotifPanel(){
+  const panel = document.getElementById('notifPanel');
+  const openBtn = document.getElementById('notifBtn');
+  const enableBtn = document.getElementById('notifEnableBtn');
+  openBtn.addEventListener('click', () => panel.classList.toggle('open'));
+  enableBtn.addEventListener('click', enableNotifications);
+}
+
 function csvField(val){
   const s = String(val == null ? '' : val);
   if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
@@ -1803,6 +1892,7 @@ async function init(){
   initNewCyclePanel();
   initSync();
   initSyncPanel();
+  initNotifPanel();
   document.getElementById('exportBtn').addEventListener('click', exportRecord);
   await loadAppData();
   renderStats();
@@ -1811,6 +1901,7 @@ async function init(){
   renderTodayCard();
   renderDaysList();
   document.getElementById('footerNote').textContent = 'Your progress saves automatically as you go.';
+  setInterval(renderWinsBar, 30000); // keeps the countdown accurate even if you just leave the page open
 }
 
 init();
