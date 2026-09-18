@@ -1029,7 +1029,7 @@ function connectSync(code, opts){
 function pushToSync(){
   if(!syncDb || !syncCode) return;
   syncDb.collection('trackers').doc(syncCode)
-    .set({ startDate: meta.startDate, days, habitTimes, updatedAt: Date.now() })
+    .set({ startDate: meta.startDate, days, habitTimes, updatedAt: Date.now() }, { merge: true })
     .catch(err => { console.error('Sync push failed:', err); setSyncStatus('error'); });
 }
 
